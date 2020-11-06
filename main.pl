@@ -10,4 +10,4 @@ question_prompt(X) :-
 start :-
   write('Welcome to 20 questions - Prolog version!'),nl,
   question_prompt(X),nl,
-  format('You chose the answer ~w', X).
+  format('You chose the answer ~fred', X).
