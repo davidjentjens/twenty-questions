@@ -1,73 +1,84 @@
-/* Base Tree */
+:- dynamic tree/2.
 
+/* ----- EXEMPLO DE ÁRVORE ----- */
+
+/*
 tree(guessTree, 
   t('É um mamífero?', 
     t('Tem listras?', 
       t('Zebra', nil, nil),
-      t('Leão', nil, nil)
+      t('Ele ruge?',
+        t('Ele hiberna?',
+          t('Urso',nil,nil),
+          t('Leão',nil,nil),
+        )
+        t('Cavalo',nil,nil))
+      ),
     ),
     t('É um passaro?',
       t('Ele voa?', 
         t('Águia', nil, nil),
         t('Pinguim', nil, nil)
       ),
-      t('Lagarto', nil, nil)
+      t('Ele tem pernas?',
+        t('Lagarto',nil,nil),
+        t('Cobra',nil,nil)
+      )
     )
   )
 ).
+*/
 
-/* Helper Functions */
 
-istree(nil).
-istree(t(_,L,R)) :- istree(L), istree(R).
+/* ----- HELPER FUNCTIONS ----- */
 
+/* Read tree from file */
+read_tree() :- 
+  see('saved_tree.txt'),
+  read(Tree),
+  seen,
+  retractall(tree(guessTree, _)),
+  asserta(tree(guessTree, Tree)).
+
+/* Save tree to file */
+save_tree_to_file() :- 
+  tell('saved_tree.txt'),
+  tree(guessTree, Tree),
+  print(Tree),
+  write('.'),
+  told.
+
+/* Checks if a given tree is a leaf */
 is_animal(t(_,L,R)) :- L = nil, R = nil.
 
+/* Extract guess string from tree node */
 extract_guess(t(String,_,_), String).
 
+/* Extract left or right branch from tree node */
 extract_left_branch(t(_,L,_), L).
 extract_right_branch(t(_,_,R), R).
 
 /* Add new animal and question */
+replace_leaf(t(Name, _, _), Name, NewTree, NewTree):- !.
+replace_leaf(t(N, L, R), Name, NewTree, t(N, Ret, R)):- replace_leaf(L, Name, NewTree, Ret).
+replace_leaf(t(N, L, R), Name, NewTree, t(N, L, Ret)):- replace_leaf(R, Name, NewTree, Ret).
+
+find_and_replace_leaf(Name, NewTree) :-
+  tree(guessTree, R),
+  replace_leaf(R, Name, NewTree, Ret),
+  retractall(tree(guessTree, _)),
+  asserta(tree(guessTree, Ret)),
+  !.
 
 
-replace_existing_fact(OldFact, NewFact) :-
-  call(OldFact), !,   % Dont backtrack to find multiple instances of old fact
-  retract(OldFact),
-  assertz(NewFact).
+/* ----- LOGIC FUNCTIONS ----- */
 
-find_and_replace_leaf(t(CurrentNodeName, L, R), nil, NewLeafName, NewTree).
-find_and_replace_leaf(t(CurrentNodeName, L, R), OldLeafName, NewLeafName, NewTree) :- 
-  (
-    extract_guess(L, LeftName),
-    OldLeafName = LeftName,
-    replace_existing_fact(L, NewTree),
-    !
-  );
-  (
-    extract_guess(R, RightName),
-    OldLeafName = RightName,
-    replace_existing_fact(R, NewTree),
-    !
-  );
-  (
-    find_and_replace_leaf(L, OldLeafName, NewLeafName, NewTree),
-    find_and_replace_leaf(R, OldLeafName, NewLeafName, NewTree)
-  ).
-  /*
-  CurrentNodeName = OldLeafName,
-    replace_existing_fact(CurrentNodeName, NewLeafName)
-  */
-
-/* Functions */
-
-
-
+/* Run through the decision tree to guess the user's answer */
 decision_tree(GuessTree, GuessedAnimal, Decision) :-
   (
     is_animal(GuessTree),
     extract_guess(GuessTree, Animal),
-    write('É um '), write(Animal), write('? (s/n)'),
+    write('É um(a) '), write(Animal), write('? (s/n)'), nl,
     read(IsCorrect), nl,
     GuessedAnimal = GuessTree,
     (
@@ -82,7 +93,7 @@ decision_tree(GuessTree, GuessedAnimal, Decision) :-
     )
   );
   (
-    extract_guess(GuessTree, Question), write(Question), write(' (s/n)'),
+    extract_guess(GuessTree, Question), write(Question), write(' (s/n)'), nl,
     read(Answer), nl,
     (
       Answer = s,
@@ -96,62 +107,46 @@ decision_tree(GuessTree, GuessedAnimal, Decision) :-
     )
   ).
 
-store_tree(GuessTree, GuessedAnimalName, AnimalName, Question, Answer) :- 
+/* Store newly obtained knowledge in the tree file */
+store_tree(GuessedAnimalName, AnimalName, Question, Answer) :- 
   (
-    Answer = s,
-    NewTree = t(Question, t(AnimalName, nil, nil), t(GuessedAnimalName, nil, nil))
-  );
-  (
-    Answer = n,
-    NewTree = t(Question, t(GuessedAnimalName, nil, nil), t(AnimalName, nil, nil))
+    (
+      Answer = s,
+      NewTree = t(Question, t(AnimalName, nil, nil), t(GuessedAnimalName, nil, nil)),
+      find_and_replace_leaf(GuessedAnimalName, NewTree)
+    );
+    (
+      Answer = n,
+      NewTree = t(Question, t(GuessedAnimalName, nil, nil), t(AnimalName, nil, nil)),
+      find_and_replace_leaf(GuessedAnimalName, NewTree)
+    )
   ),
-  find_and_replace_leaf(GuessTree, GuessedAnimalName, AnimalName, NewTree).
+  save_tree_to_file().
 
-/* Execution */
+
+/* ----- EXECUTION ----- */
 
 start :-
-  write('Bem-vindo ao jogo dos animais. Vou tentar adivinhar qual está pensando.'),nl,
-  tree(guessTree, GuessTree), 
+  read_tree(),
+  write('Bem-vindo ao jogo dos animais. Pense em um animal e vou tentar adivinhar qual é.'), nl,
+  tree(guessTree, GuessTree),
   decision_tree(GuessTree, GuessedAnimal, Decision), nl,
   (
     (
       Decision = 'Correto',
       write('YAY! Adivinhei seu animal!'), nl,
-      !,
-      fail
+      !
     );
     (
       Decision = 'Incorreto', 
-      write('Puxa! Eu não sei! Qual animal pensou?'), nl,
+      write('Puxa! Eu não sei! Qual animal pensou? (Coloque sua resposta entre aspas simples: \')'), nl,
       read(AnimalName),
       extract_guess(GuessedAnimal, GuessedAnimalName),
-      format('Qual pergunta devo fazer para distinguir "~w" de "~w"?', [AnimalName, GuessedAnimalName]), nl,
+      format('Qual pergunta devo fazer para distinguir "~w" de "~w"? (Coloque sua resposta entre aspas simples: \')', [AnimalName, GuessedAnimalName]), nl,
       read(Question),
-      format('Agora digite qual a resposta certa para "~w" (s / n)', [AnimalName]), nl,
+      format('Agora digite qual a resposta certa para "~w" (s/n)', [AnimalName]), nl,
       read(Answer),
-      store_tree(GuessTree, GuessedAnimalName, AnimalName, Question, Answer),
-      write('YAAAY! Obrigado, agora eu sei como ler a sua mente mais um pouquinho! Toma um s7 ß!'), nl
+      store_tree(GuessedAnimalName, AnimalName, Question, Answer),
+      write('YAAAY! Obrigado, agora eu sei como ler a sua mente mais um pouquinho!'), nl
     )
   ).
-
-  /*
-  teste :- 
-  Old = t('Leão', nil, nil),
-  New = t('Ele ruge?', t('Leão', nil, nil), t('Cavalo', nil, nil)),
-  replace_existing_fact(Old, New).
-
-replace_each_existing_fact(OldFact, NewFact) :-
-    forall(replace_existing_fact(OldFact, NewFact), true).
-  
-  write().
-  % TODO: Fazer os paranaues necessarios para a nova pergunta existir
-  % A pergunta substitui o Guess e recoloca ele do lado oposto a resposta nova colocada.*/
-
-  /*
-  decision_tree(Decision, Guess) :-
-    is_animal(Guess), Aswer = ;
-    decision_tree()
-    % (format('É um(a) ~w?', Animal), nl);
-    % decision_tree(X).
-    Decision = 'Incorrect', Guess = 'Fred'.
-    */
